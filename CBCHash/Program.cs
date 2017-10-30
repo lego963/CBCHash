@@ -14,13 +14,15 @@ namespace CBCHash
             const ulong key64 = 5931337798882863083;
             Console.WriteLine($"key64: {key64}");
             Console.WriteLine($"IV: {iv}");
-            for (var i = 0; i < 20; i++)
+            Console.WriteLine();
+
+            var rnd = new Random();
+            for (var i = 0; i < 5; i++)
             {
-                var rnd = new Random();
-                var tmpMessage = rnd.Next(1000000, int.MaxValue);
+                var tmpMessage = rnd.Next(100000, int.MaxValue);
                 Console.WriteLine($"Message: {tmpMessage}");
                 OneMessage(tmpMessage.ToString());
-                Console.WriteLine(new string('-', 25));
+                Console.WriteLine();
             }
 
             Console.ReadKey();
