@@ -19,13 +19,13 @@ namespace CBCHash
                 var rnd = new Random();
                 var tmpMessage = rnd.Next(1000000, int.MaxValue);
                 Console.WriteLine($"Message: {tmpMessage}");
-                WorkIt(tmpMessage.ToString());
+                OneMessage(tmpMessage.ToString());
                 Console.WriteLine(new string('-', 25));
             }
 
             Console.ReadKey();
         }
-        private static void WorkIt(string input, ulong iv = 3926821066414368105, ulong key64 = 5931337798882863083)
+        private static void OneMessage(string input, ulong iv = 3926821066414368105, ulong key64 = 5931337798882863083)
         {
             var message = Padding(input);
             var mesgC = ToBlocks(message);
@@ -37,29 +37,27 @@ namespace CBCHash
             EvaluateBlock(mesgC[mesgC.Length - 1]);
         }
         [SuppressMessage("ReSharper", "PossibleLossOfFraction")]
-        private static void EvaluateBlock(ulong mesg) //Метод, переводящий строку с двоичными данными в символьный формат.
+        private static void EvaluateBlock(ulong msg) //Метод, переводящий строку с двоичными данными в символьный формат.
         {
+            var block16 = new ushort[4];
 
-            var destroyMsg = new ushort[4];
-
-            destroyMsg[0] = (ushort)(mesg >> 3 * 16);
-            destroyMsg[1] = (ushort)(((mesg >> 2 * 16) << 3 * 16) >> 3 * 16);
-            destroyMsg[2] = (ushort)((mesg << 2 * 16) >> 3 * 16);
-            destroyMsg[3] = (ushort)((mesg << 3 * 16) >> 3 * 16);
+            block16[0] = (ushort)(msg >> 3 * 16);
+            block16[1] = (ushort)(((msg >> 2 * 16) << 3 * 16) >> 3 * 16);
+            block16[2] = (ushort)((msg << 2 * 16) >> 3 * 16);
+            block16[3] = (ushort)((msg << 3 * 16) >> 3 * 16);
 
             var symbols = new ulong[4];
             for (var i = 0; i < 4; i++)
             {
-                symbols[i] = destroyMsg[i];
+                symbols[i] = block16[i];
             }
 
-
-            var data = BitConverter.GetBytes(mesg);
+            var data = BitConverter.GetBytes(msg);
             Array.Reverse(data);
             var hex = BitConverter.ToString(data).Replace('-', ' ');
             //корреляция
             uint mask = 1;
-            var x = mesg;
+            var x = msg;
             var k = 0; //кол-во 1 в ulong
             while (x != 0)
             {
@@ -70,7 +68,7 @@ namespace CBCHash
             var correlation = (double)k / 64; //корреляция и мат. ожидание в одном
             //дисперсия
             var dispersion = 0D;
-            x = mesg;
+            x = msg;
             for (var i = 0; i < 64; i++)
             {
                 double bit = x & mask;
@@ -81,7 +79,7 @@ namespace CBCHash
             //xi^2
 
             var v = new int[8];
-            x = mesg;
+            x = msg;
             mask = 15;
             for (var i = 0; i < 16; i++)
             {
@@ -136,39 +134,34 @@ namespace CBCHash
             return (ushort)((CycleMoveRight(k, i * 5) << 48) >> 48);
         }
 
-        private static ulong Encrypt(ulong mesg, ulong key, int rounds = 16)
+        private static ulong Encrypt(ulong msg, ulong key, int rounds = 16)
         {
-            #region unpack mesg
             var i = 0;
-            var temp = new ushort[4];
-            temp[0] = (ushort)(mesg >> 3 * 16);
-            temp[1] = (ushort)(((mesg >> 2 * 16) << 3 * 16) >> 3 * 16);
-            temp[2] = (ushort)((mesg << 2 * 16) >> 3 * 16);
-            temp[3] = (ushort)((mesg << 3 * 16) >> 3 * 16);
-            #endregion
+            var block16 = new ushort[4];
+            block16[0] = (ushort)(msg >> 3 * 16);
+            block16[1] = (ushort)(((msg >> 2 * 16) << 3 * 16) >> 3 * 16);
+            block16[2] = (ushort)((msg << 2 * 16) >> 3 * 16);
+            block16[3] = (ushort)((msg << 3 * 16) >> 3 * 16);
 
             while (i < rounds)
             {
                 var key16 = KeyGenerator(i, key);
-                ushort[] c = new ushort[temp.Length];
-                c[0] = (ushort)(F(temp[0], temp[1]) ^ temp[3]);
-                c[2] = temp[0];
-                c[1] = temp[2];
-                c[3] = (ushort)(key16 ^ temp[1]);
-                temp = c;
+                var c = new ushort[block16.Length];
+                c[0] = (ushort)(F(block16[0], block16[1]) ^ block16[3]);
+                c[2] = block16[0];
+                c[1] = block16[2];
+                c[3] = (ushort)(key16 ^ block16[1]);
+                block16 = c;
                 i++;
             }
-
-            #region pack mesg
-            ulong t1 = temp[0];
+            ulong t1 = block16[0];
             t1 = t1 << 3 * 16;
-            ulong t2 = temp[1];
+            ulong t2 = block16[1];
             t2 = t2 << 2 * 16;
-            ulong t3 = temp[2];
+            ulong t3 = block16[2];
             t3 = t3 << 16;
-            ulong t4 = temp[3];
-            return t1 | t2 | t3 | t4;
-            #endregion
+            ulong t4 = block16[3];
+            return (t1 | t2 | t3 | t4) ^ msg;
         }
 
         private static string Padding(string s)
@@ -181,26 +174,23 @@ namespace CBCHash
         }
         private static ulong[] ToBlocks(string s)
         {
-            ushort[] temp = new ushort[4];
-            ulong[] result = new ulong[s.Length / 4];
+            var block16 = new ushort[4];
+            var result = new ulong[s.Length / 4];
             for (int i = 0, j = 0; i < s.Length; i += 4, j++)
             {
-                temp[0] = Convert.ToUInt16(s[i]);
-                temp[1] = Convert.ToUInt16(s[i + 1]);
-                temp[2] = Convert.ToUInt16(s[i + 2]);
-                temp[3] = Convert.ToUInt16(s[i + 3]);
-                #region pack mesg
+                block16[0] = Convert.ToUInt16(s[i]);
+                block16[1] = Convert.ToUInt16(s[i + 1]);
+                block16[2] = Convert.ToUInt16(s[i + 2]);
+                block16[3] = Convert.ToUInt16(s[i + 3]);
 
-                ulong t1 = temp[0];
+                ulong t1 = block16[0];
                 t1 = t1 << 3 * 16;
-                ulong t2 = temp[1];
+                ulong t2 = block16[1];
                 t2 = t2 << 2 * 16;
-                ulong t3 = temp[2];
+                ulong t3 = block16[2];
                 t3 = t3 << 16;
-                ulong t4 = temp[3];
+                ulong t4 = block16[3];
                 result[j] = t1 | t2 | t3 | t4;
-                #endregion
-
             }
             return result;
         }
